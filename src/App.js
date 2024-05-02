@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import "./App.css";
 import "@aws-amplify/ui-react/styles.css";
-import { Amplify } from "aws-amplify";
-import { generateClient } from "aws-amplify/api";
-import { getUrl, uploadData, remove } from "aws-amplify/storage";
-import config from "./amplifyconfiguration.json";
+
+import { uploadData } from "aws-amplify/storage";
+import { getUrl } from "aws-amplify/storage";
+import { remove } from "aws-amplify/storage";
+
 import {
   Button,
   Flex,
@@ -15,15 +16,14 @@ import {
   View,
   withAuthenticator,
 } from "@aws-amplify/ui-react";
-
 import { listNotes } from "./graphql/queries";
 import {
   createNote as createNoteMutation,
   deleteNote as deleteNoteMutation,
 } from "./graphql/mutations";
 
-Amplify.configure(config);
-const API = generateClient();
+import { generateClient } from "aws-amplify/api";
+const client = generateClient();
 
 function App({ signOut }) {
   const [notes, setNotes] = useState([]);
@@ -33,13 +33,13 @@ function App({ signOut }) {
   }, []);
 
   async function fetchNotes() {
-    const apiData = await API.graphql({ query: listNotes });
+    const apiData = await client.graphql({ query: listNotes });
     const notesFromAPI = apiData.data.listNotes.items;
     await Promise.all(
       notesFromAPI.map(async (note) => {
         if (note.image) {
-          const url = await getUrl({ path: note.name });
-          note.image = url;
+          const url = await getUrl({ path: "public/" + note.name });
+          note.image = url.url;
         }
         return note;
       })
@@ -56,8 +56,9 @@ function App({ signOut }) {
       description: form.get("description"),
       image: image.name,
     };
-    if (!!data.image) await uploadData({ path: data.name, data: image }).result;
-    await API.graphql({
+    if (!!data.image)
+      await uploadData({ path: "public/" + data.name, data: image });
+    await client.graphql({
       query: createNoteMutation,
       variables: { input: data },
     });
@@ -68,8 +69,8 @@ function App({ signOut }) {
   async function deleteNote({ id, name }) {
     const newNotes = notes.filter((note) => note.id !== id);
     setNotes(newNotes);
-    await remove({ path: name });
-    await API.graphql({
+    await remove({ path: "public/" + name });
+    await client.graphql({
       query: deleteNoteMutation,
       variables: { input: { id } },
     });
@@ -96,15 +97,15 @@ function App({ signOut }) {
             variation="quiet"
             required
           />
-          <Button type="submit" variation="primary">
-            Create Note
-          </Button>
           <View
             name="image"
             as="input"
             type="file"
             style={{ alignSelf: "end" }}
           />
+          <Button type="submit" variation="primary">
+            Create Note
+          </Button>
         </Flex>
       </View>
       <Heading level={2}>Current Notes</Heading>
